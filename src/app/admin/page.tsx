@@ -16,6 +16,10 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [transitioning, setTransitioning] = useState(false)
   const [appUrl, setAppUrl] = useState('')
+  const [showResetModal, setShowResetModal] = useState(false)
+  const [resetPassword, setResetPassword] = useState('')
+  const [resetError, setResetError] = useState('')
+  const [resetting, setResetting] = useState(false)
 
   useEffect(() => {
     setAppUrl(process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin)
@@ -60,6 +64,35 @@ export default function AdminPage() {
       body: JSON.stringify({ phase }),
     })
     setTransitioning(false)
+  }
+
+  const closeResetModal = () => {
+    setShowResetModal(false)
+    setResetPassword('')
+    setResetError('')
+  }
+
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setResetting(true)
+    setResetError('')
+
+    const res = await fetch('/api/admin/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: resetPassword }),
+    })
+
+    if (res.ok) {
+      closeResetModal()
+      setCoopCount(0)
+      const sessionRes = await fetch('/api/session').then(r => r.json())
+      setSession(sessionRes)
+    } else {
+      const data = await res.json().catch(() => ({}))
+      setResetError(data.error === 'Contraseña incorrecta' ? data.error : 'No se pudo resetear la base de datos')
+    }
+    setResetting(false)
   }
 
   if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center"><LoadingSpinner /></div>
@@ -191,7 +224,67 @@ export default function AdminPage() {
           <QRCode value={appUrl} size={180} />
           <p className="text-slate-500 text-xs break-all text-center">{appUrl}</p>
         </div>
+
+        {/* Zona de peligro */}
+        <div className="bg-red-950 border border-red-900 rounded-2xl p-4">
+          <p className="text-red-300 text-xs uppercase tracking-wider mb-2">Zona de peligro</p>
+          <button
+            onClick={() => setShowResetModal(true)}
+            className="w-full bg-red-800 hover:bg-red-700 text-white font-medium py-3 rounded-xl transition-colors"
+          >
+            🗑️ Resetear base de datos
+          </button>
+          <p className="text-red-400 text-xs mt-2">
+            Borra cooperativas, respuestas, ofertas, necesidades y resúmenes. Vuelve la fase a &quot;Registro&quot;.
+          </p>
+        </div>
       </div>
+
+      {/* Modal de confirmación de reset */}
+      {showResetModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center px-4 z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+            <div className="text-center mb-4">
+              <div className="text-4xl mb-2">⚠️</div>
+              <h2 className="text-lg font-bold text-gray-800">¿Resetear la base de datos?</h2>
+              <p className="text-gray-500 text-sm mt-1">
+                Esta acción no se puede deshacer. Se van a borrar todos los datos cargados en el evento.
+              </p>
+            </div>
+
+            <form onSubmit={handleReset} className="space-y-3">
+              <input
+                type="password"
+                value={resetPassword}
+                onChange={e => setResetPassword(e.target.value)}
+                placeholder="Confirmá la contraseña de admin"
+                autoFocus
+                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+              />
+
+              {resetError && <p className="text-red-500 text-sm text-center">{resetError}</p>}
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={closeResetModal}
+                  disabled={resetting}
+                  className="w-full bg-gray-100 text-gray-700 font-medium py-3 rounded-xl hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={resetting || !resetPassword}
+                  className="w-full bg-red-700 text-white font-semibold py-3 rounded-xl hover:bg-red-800 disabled:opacity-50 transition-colors"
+                >
+                  {resetting ? 'Borrando...' : 'Sí, resetear'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
